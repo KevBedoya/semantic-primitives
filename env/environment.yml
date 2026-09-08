@@ -1,0 +1,27 @@
+# Reference only -- the env is created at an explicit prefix so it lands beside
+# the code on N: rather than on C:, which has under 10 GB free:
+#
+#   conda create -y -p .\.venv python=3.11
+#   .\.venv\python.exe -m pip install -r env\requirements.txt
+#
+# `conda env create -f` would place it under the conda envs root instead, which
+# on this machine is on C:. Use the prefix form.
+name: semprim
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      # torch must come from the CUDA index; driver 560.94 supports cu121.
+      # --index-url https://download.pytorch.org/whl/cu121
+      - torch
+      - transformers
+      - sentence-transformers
+      - datasets
+      - accelerate
+      - scikit-learn
+      - faiss-cpu
+      - pyyaml
+      - entmax
+      - pytest

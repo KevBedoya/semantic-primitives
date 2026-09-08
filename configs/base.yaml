@@ -1,0 +1,58 @@
+# Milestone-3 config: the real corpus, one point of the N sweep.
+#
+# Copy per sweep point and change `model.n_primitives` and `run_name`. The
+# config file is the record of what ran -- it is copied into the results dir --
+# so sweeping by editing this file in place destroys the provenance of every
+# earlier run.
+
+run_name: base_n256
+seed: 0
+device: auto
+
+encoder: sentence-transformers/LaBSE
+max_seq_length: 64
+encode_batch_size: 64
+cache_dir: results/cache/opus7
+
+data:
+  source: opus
+  limit_per_lang: 20000     # 6 non-pivot languages -> ~120k pairs, ~240k texts
+
+model:
+  n_primitives: 256         # sweep: 64, 256, 1024
+  hidden: 1024
+  tau_init: 1.0
+  learn_tau: true
+  dropout: 0.0
+
+kernel:
+  name: hellinger           # then: learned, mixture
+
+archetypal:
+  enabled: true
+  sample: 50000
+  outer: 30
+  inner: 100
+
+train:
+  epochs: 30
+  batch_size: 512
+  lr: 3.0e-4
+  weight_decay: 0.01
+  temperature: 0.05
+  grad_clip: 5.0
+  alpha_schedule: [[0, 1.0], [10, 1.5], [20, 2.0]]
+
+loss:
+  contrast: 1.0
+  align: 1.0
+  reconstruct: 1.0
+  # Keep small. Entropy pushed hard turns the model into a near one-hot
+  # classifier, which throws away the mixture semantics the design exists for.
+  # Prefer raising the entmax alpha to get zeros.
+  sparsity: 0.0
+  # Off by default. Turn on only if `dead` in the epoch log stays high --
+  # forcing uniform usage is itself a distortion, since real primitives need
+  # not occur equally often.
+  diversity: 0.0
+  align_geometry: l2        # then: hellinger, to match the kernel's geometry

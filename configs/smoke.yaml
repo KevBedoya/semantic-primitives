@@ -1,0 +1,54 @@
+# Smoke config: exercises the whole pipeline offline in about a minute.
+#
+# Synthetic data on purpose. This proves the plumbing runs end to end -- cache,
+# archetypal fit, bottleneck, kernel, losses, diagnostics, results dir -- without
+# a multi-GB download. It proves nothing semantic, and its numbers must never
+# appear in a results table. See data/corpora.py::synthetic_pairs.
+
+run_name: smoke
+seed: 0
+device: auto
+
+encoder: sentence-transformers/LaBSE
+max_seq_length: 32
+encode_batch_size: 64
+cache_dir: results/cache/smoke
+
+data:
+  source: synthetic
+  n: 2500          # -> 5000 texts, 2500 equivalence pairs
+  n_topics: 16
+
+model:
+  n_primitives: 16
+  hidden: 256
+  tau_init: 1.0
+  learn_tau: true
+  dropout: 0.0
+
+kernel:
+  name: hellinger
+
+archetypal:
+  enabled: true
+  sample: 2000
+  outer: 10
+  inner: 40
+
+train:
+  epochs: 6
+  batch_size: 256
+  lr: 1.0e-3
+  weight_decay: 0.0
+  temperature: 0.05
+  grad_clip: 5.0
+  # Start dense so no primitive is killed before it has been used, then tighten.
+  alpha_schedule: [[0, 1.0], [3, 1.5]]
+
+loss:
+  contrast: 1.0
+  align: 1.0
+  reconstruct: 1.0
+  sparsity: 0.0
+  diversity: 0.0
+  align_geometry: l2

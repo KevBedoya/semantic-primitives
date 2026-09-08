@@ -1,0 +1,19 @@
+# The conda env lives inside the project so it stays off the C: drive, which has
+# under 10 GB free. It is 5+ GB and must never be committed.
+.venv/
+.hf/
+
+# Generated: caches, checkpoints, run outputs. results/ keeps its structure via
+# .gitkeep but not its contents -- an embedding cache is gigabytes and a rerun
+# reproduces it from the config.
+results/**
+!results/.gitkeep
+*.f16
+*.pt
+*.npy
+*.npz
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/

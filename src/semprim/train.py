@@ -276,19 +276,57 @@ def train(cfg: dict, out_dir: str) -> dict:
     with open(os.path.join(out_dir, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
-    if ceiling is not None and history:
+    # SPARSITY-MATCHED CEILING -- computed after training, because it needs the
+    # head's observed support size.
+    #
+    # The dense ceiling above is NOT a bound on a sparse head, and treating it
+    # as one gives the wrong answer with confidence. At N=256 the head runs
+    # entmax alpha=2 and activates ~21 of 256 coordinates; against the dense fit
+    # it read "29.5x above ceiling", implying it could not compute the mapping.
+    # Matched to k=21 the same head is 1.84x above, and at N=64 it is 1.33x --
+    # a head with real headroom, not a broken one. The dense figure is kept for
+    # continuity with Milestone 2 but must not be read as a bound.
+    matched = None
+    if history and cfg.get("archetypal", {}).get("enabled", True):
+        k = int(round(history[-1].get("mean_active_per_text") or 0))
+        if 0 < k < n_primitives:
+            Dk, Ak, _ = archetypal_fit(
+                sample_n, n_primitives,
+                outer=cfg.get("archetypal", {}).get("outer", 15),
+                inner=cfg.get("archetypal", {}).get("inner", 50), seed=seed,
+                normalize=False, topk=k)
+            qk = fit_quality(Dk, Ak, sample_n)
+            matched = {"k": k,
+                       "ceiling": qk["cosine_loss"] if recon_mode == "cosine"
+                       else qk["mse"]}
+    summary["sparsity_matched_ceiling"] = matched
+
+    if history:
         got = history[-1].get("reconstruct")
-        if got is not None:
-            print(f"\nreconstruction: head {got:.6f} vs ceiling {ceiling:.6f} "
-                  f"(ratio {got / max(ceiling, 1e-12):.2f}x)")
-            if got < ceiling * 0.999:
+        if got is not None and matched is not None:
+            mc = matched["ceiling"]
+            print(f"\nreconstruction: head {got:.6f}")
+            print(f"  vs k-sparse ceiling (k={matched['k']}): {mc:.6f} "
+                  f"-> {got / max(mc, 1e-12):.2f}x   [the fair comparison]")
+            if ceiling is not None:
+                print(f"  vs dense ceiling (all {n_primitives}): "
+                      f"{ceiling:.6f} -> {got / max(ceiling, 1e-12):.2f}x   "
+                      f"[not a bound on a sparse head]")
+            if got < mc * 0.999:
                 # The head cannot legitimately beat a per-example fit at the
-                # same N -- that optimum is over a strict superset of what the
-                # head can express. Beating it means the two are not being
-                # measured on the same thing.
-                print("  WARNING: head beat the non-amortised ceiling. The two "
-                      "are not comparable -- check normalisation and that both "
-                      "use the same N and the same targets.")
+                # same N and the same support size -- that optimum is over a
+                # strict superset of what the head can express. Beating it means
+                # the two are not being measured on the same thing.
+                print("  WARNING: head beat the matched ceiling. The two are "
+                      "not comparable -- check normalisation, N, k, and that "
+                      "both use the same targets.")
+        elif got is not None and ceiling is not None:
+            print(f"\nreconstruction: head {got:.6f} vs dense ceiling "
+                  f"{ceiling:.6f} (ratio {got / max(ceiling, 1e-12):.2f}x); "
+                  f"no sparsity-matched ceiling computed")
+
+    with open(os.path.join(out_dir, "summary.json"), "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
     return summary
 
 

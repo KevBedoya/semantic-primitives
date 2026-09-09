@@ -57,9 +57,38 @@ def project_simplex(v: torch.Tensor) -> torch.Tensor:
 
 
 @torch.no_grad()
+def project_simplex_topk(v: torch.Tensor, k: int) -> torch.Tensor:
+    """Project each row onto the k-sparse simplex: at most k nonzeros.
+
+    WHY A K-SPARSE CEILING IS THE ONLY FAIR ONE
+    -------------------------------------------
+    The trained bottleneck runs entmax at alpha=2 and activates about 21
+    coordinates per text regardless of N. Comparing it against a *dense* fit --
+    one free to spread mass over all N -- is not a bound but a category error,
+    and it produced exactly the wrong conclusion: at N=256 the head looked
+    "29.5x above the ceiling", suggesting it could not compute the mapping, when
+    in fact it beats the dense ceiling at its own active count (0.324 against
+    0.402 at N=21). A k-sparse code over 256 archetypes is strictly stronger
+    than a dense code over 21, because it also chooses *which* 21 to use.
+
+    Keep the top k entries, project that sub-vector onto the simplex, zero the
+    rest. The k-sparse simplex is non-convex, so this is the standard greedy
+    projection rather than an exact one, and the resulting error is therefore an
+    upper bound on the true k-sparse optimum -- which is the safe direction for a
+    ceiling: it can only make the head look worse, never better.
+    """
+    if k >= v.shape[-1]:
+        return project_simplex(v)
+    topv, topi = torch.topk(v, k, dim=-1)
+    out = torch.zeros_like(v)
+    out.scatter_(-1, topi, project_simplex(topv))
+    return out
+
+
+@torch.no_grad()
 def fit_alpha(Y: torch.Tensor, D: torch.Tensor, iters: int = 200,
               lr: float | None = None, tol: float = 1e-10,
-              chunk: int | None = None) -> torch.Tensor:
+              chunk: int | None = None, topk: int | None = None) -> torch.Tensor:
     """Row-chunked wrapper around ``_fit_alpha_block``.
 
     Each row's fit is independent given D, so chunking is exact -- it changes
@@ -70,15 +99,17 @@ def fit_alpha(Y: torch.Tensor, D: torch.Tensor, iters: int = 200,
     also has to hold the model and may be sharing with the solver.
     """
     if chunk is None or chunk >= Y.shape[0]:
-        return _fit_alpha_block(Y, D, iters=iters, lr=lr, tol=tol)
-    parts = [_fit_alpha_block(Y[i:i + chunk], D, iters=iters, lr=lr, tol=tol)
+        return _fit_alpha_block(Y, D, iters=iters, lr=lr, tol=tol, topk=topk)
+    parts = [_fit_alpha_block(Y[i:i + chunk], D, iters=iters, lr=lr, tol=tol,
+                              topk=topk)
              for i in range(0, Y.shape[0], chunk)]
     return torch.cat(parts, dim=0)
 
 
 @torch.no_grad()
 def _fit_alpha_block(Y: torch.Tensor, D: torch.Tensor, iters: int = 200,
-                     lr: float | None = None, tol: float = 1e-10) -> torch.Tensor:
+                     lr: float | None = None, tol: float = 1e-10,
+                     topk: int | None = None) -> torch.Tensor:
     """argmin_a ||Y - a D||^2 over the simplex, by accelerated projected gradient.
 
     ``Y`` is (n, d), ``D`` is (N, d) with archetypes as rows, result is (n, N).
@@ -107,9 +138,11 @@ def _fit_alpha_block(Y: torch.Tensor, D: torch.Tensor, iters: int = 200,
     x = torch.full((n, N), 1.0 / N, device=Y.device, dtype=Y.dtype)
     y = x.clone()
     t = 1.0
+    project = (project_simplex if topk is None
+               else lambda v: project_simplex_topk(v, topk))
     for _ in range(iters):
         grad = 2.0 * (y @ D - Y) @ D.t()
-        x_new = project_simplex(y - lr * grad)
+        x_new = project(y - lr * grad)
         t_new = 0.5 * (1.0 + (1.0 + 4.0 * t * t) ** 0.5)
         y = x_new + ((t - 1.0) / t_new) * (x_new - x)
         shift = (x_new - x).abs().max()
@@ -203,7 +236,7 @@ def archetypal_fit(Y: torch.Tensor, n_primitives: int, outer: int = 30,
                    inner: int = 100, seed: int = 0,
                    normalize: bool = True, verbose: bool = False,
                    chunk: int | None = None, constrain: str = "none",
-                   free_scale: bool = False):
+                   free_scale: bool = False, topk: int | None = None):
     """Alternating fit of archetypes D and simplex codes A.
 
     Returns ``(D, A, mse)`` with D (N, d), A (n, N), and mse the mean squared
@@ -238,7 +271,12 @@ def archetypal_fit(Y: torch.Tensor, n_primitives: int, outer: int = 30,
     D = init_archetypes(Y, n_primitives, seed=seed)
     A = None
     mse = float("inf")
-    coder = fit_nonneg if free_scale else fit_alpha
+    if free_scale and topk is not None:
+        raise NotImplementedError(
+            "topk is only implemented for the simplex coder; a k-sparse "
+            "non-negative fit would need its own projection")
+    coder = fit_nonneg if free_scale else \
+        (lambda *args, **kw: fit_alpha(*args, topk=topk, **kw))
 
     if free_scale and constrain == "none":
         # A FREE SCALE CREATES A DEGENERACY THAT MUST BE FIXED, NOT LEFT ALONE.

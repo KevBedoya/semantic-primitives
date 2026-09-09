@@ -137,6 +137,10 @@ def main(argv=None):
             "active_per_text": final.get("mean_active_per_text"),
             "reconstruct": final.get("reconstruct"),
             "ceiling": summary.get("archetypal_ceiling"),
+            "matched_ceiling": (summary.get("sparsity_matched_ceiling") or {}
+                                ).get("ceiling"),
+            "matched_k": (summary.get("sparsity_matched_ceiling") or {}
+                          ).get("k"),
             "tau": final.get("tau"),
             "alpha": final.get("alpha"),
         })
@@ -153,22 +157,30 @@ def main(argv=None):
 def format_table(rows) -> str:
     base = rows[0]["baseline"] if rows else float("nan")
     out = ["Milestone 3: bottleneck vs frozen LaBSE, held-out P@1",
-           f"{'N':>6} {'P@1':>8} {'LaBSE':>8} {'delta':>8} {'dead':>7} "
-           f"{'act/text':>9} {'recon':>9} {'ceiling':>9}"]
+           f"{'N':>6} {'P@1':>8} {'LaBSE':>8} {'delta':>8} {'dead':>9} "
+           f"{'act/text':>9} {'recon':>9} {'k-ceil':>9} {'ratio':>7}"]
     for r in rows:
         dead = "-" if r["dead"] is None else f"{r['dead']}/{r['n']}"
         act = "-" if r["active_per_text"] is None else f"{r['active_per_text']:.1f}"
         rec = "-" if r["reconstruct"] is None else f"{r['reconstruct']:.5f}"
-        ceil = "-" if r["ceiling"] is None else f"{r['ceiling']:.5f}"
+        mc = r.get("matched_ceiling")
+        ceil = "-" if mc is None else f"{mc:.5f}"
+        ratio = ("-" if (mc is None or r["reconstruct"] is None)
+                 else f"{r['reconstruct'] / max(mc, 1e-12):.2f}x")
         out.append(f"{r['n']:>6} {r['p_at_1']:>8.4f} {r['baseline']:>8.4f} "
-                   f"{r['p_at_1'] - r['baseline']:>+8.4f} {dead:>7} "
-                   f"{act:>9} {rec:>9} {ceil:>9}")
+                   f"{r['p_at_1'] - r['baseline']:>+8.4f} {dead:>9} "
+                   f"{act:>9} {rec:>9} {ceil:>9} {ratio:>7}")
     out.append("")
     out.append(f"LaBSE cosine on the same pairs: {base:.4f}. The bottleneck is")
     out.append("expected to lose; the deliverable is the size of the loss.")
-    out.append("recon vs ceiling: matching the ceiling means N is the thing to")
-    out.append("change, not the head. Far above it means the head cannot compute")
-    out.append("the mapping and the losses or capacity are at fault.")
+    out.append("")
+    out.append("k-ceil is the ceiling fitted at the head's OWN support size, not")
+    out.append("the dense one. A sparse head compared against a dense fit is not")
+    out.append("compared against a bound: at N=256 the dense figure reads 29.5x")
+    out.append("and implies the head cannot compute the mapping, while matched to")
+    out.append("k=21 the same head is 1.84x. Ratio near 1 means N is the thing to")
+    out.append("change; a ratio that GROWS with N means the head is failing to")
+    out.append("exploit the larger inventory, which the dead count corroborates.")
     return "\n".join(out)
 
 

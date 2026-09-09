@@ -1,0 +1,14 @@
+{
+  "n": 256,
+  "rows": [
+    {
+      "kernel": "hellinger",
+      "n": 256,
+      "p_at_1": 0.9031667212645212,
+      "baseline": 0.9163333773612976,
+      "dead": 21,
+      "active_per_text": 21.50048828125,
+      "b_stats": null
+    }
+  ]
+}

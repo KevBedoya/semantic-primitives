@@ -80,7 +80,8 @@ def coherence(alpha: torch.Tensor, H: torch.Tensor, k: int = 50,
 
 
 @torch.no_grad()
-def cross_language(alpha: torch.Tensor, langs, k: int = 50) -> dict:
+def cross_language(alpha: torch.Tensor, langs, k: int = 50,
+                   n_control: int = 4000, seed: int = 0) -> dict:
     """Language composition of each coordinate's top-k.
 
     THE test for the central claim. A coordinate whose top-k is 90% one language
@@ -89,30 +90,62 @@ def cross_language(alpha: torch.Tensor, langs, k: int = 50) -> dict:
     which is why retrieval cannot catch this.
 
     ``entropy_ratio`` is the entropy of the language distribution over the
-    coordinate's top-k, divided by the entropy of the corpus language
-    distribution. 1.0 means the coordinate is used exactly as evenly across
-    languages as the corpus allows; near 0 means it is a language detector.
+    coordinate's top-k, divided by the *expected entropy of a random k-sample
+    from the same corpus*. 1.0 means the coordinate is as language-diverse as k
+    draws from the corpus can be; near 0 means it is a language detector.
+
+    THE DENOMINATOR IS A MONTE-CARLO CONTROL, NOT THE FULL-CORPUS ENTROPY
+    ---------------------------------------------------------------------
+    Entropy estimated from k samples is biased downward, badly when k is close
+    to the number of categories. Dividing by the full-corpus entropy therefore
+    charges every coordinate for sampling bias rather than for language
+    specialisation. Measured on this corpus (50% English by construction, since
+    pairs are pivoted through it, plus six languages at 1/12 each), a coordinate
+    drawing its top-k *exactly* from the corpus distribution scores:
+
+        k=10 -> 0.785    k=25 -> 0.910    k=50 -> 0.959    k=500 -> 0.997
+
+    -- never 1.0. At k=10 that is a 21% penalty for existing. Estimating the
+    denominator the same way the numerator is estimated removes it, and makes
+    the metric comparable across different k, which the naive version is not.
+
+    This correction raises every score, so to be explicit: it was made after a
+    smoke run marginally failed this check and before the real run, on the
+    strength of the arithmetic above, which is a property of the estimator and
+    says nothing about any model.
     """
     langs = np.asarray(langs)
     uniq = sorted(set(langs.tolist()))
     lang_id = {l: i for i, l in enumerate(uniq)}
     ids = np.array([lang_id[l] for l in langs])
+    k = min(k, alpha.shape[0])
 
     corpus_counts = np.bincount(ids, minlength=len(uniq)).astype(np.float64)
     corpus_p = corpus_counts / corpus_counts.sum()
-    corpus_H = -(corpus_p * np.log(corpus_p + 1e-12)).sum()
 
-    top = alpha.topk(k=min(k, alpha.shape[0]), dim=0).indices.cpu().numpy()
+    rng = np.random.default_rng(seed)
+    draws = rng.choice(len(uniq), size=(n_control, k), p=corpus_p)
+    ctrl = []
+    for row in draws:
+        c = np.bincount(row, minlength=len(uniq)).astype(np.float64)
+        q = c / c.sum()
+        ctrl.append(-(q * np.log(q + 1e-12)).sum())
+    control_H = float(np.mean(ctrl))
+
+    top = alpha.topk(k=k, dim=0).indices.cpu().numpy()
     out = {}
     for i in range(alpha.shape[1]):
         counts = np.bincount(ids[top[:, i]], minlength=len(uniq)).astype(np.float64)
         p = counts / counts.sum()
         H = -(p * np.log(p + 1e-12)).sum()
         out[i] = {
-            "entropy_ratio": float(H / corpus_H) if corpus_H > 0 else float("nan"),
+            "entropy_ratio": float(H / control_H) if control_H > 0
+            else float("nan"),
             "dominant_lang": uniq[int(counts.argmax())],
             "dominant_share": float(counts.max() / counts.sum()),
         }
+    out["_control"] = {"expected_entropy": control_H, "k": k,
+                       "n_languages": len(uniq)}
     return out
 
 

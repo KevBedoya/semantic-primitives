@@ -1,0 +1,80 @@
+{
+  "run": "results\\sweep\\n256",
+  "n_primitives": 256,
+  "kernel": "hellinger",
+  "coordinates_used": 235,
+  "thresholds": {
+    "lang_entropy_min": 0.7,
+    "paired_top1_lift_min": 0.3,
+    "coherence_lift_min": 0.1,
+    "ablation_unevenness_min": 0.5
+  },
+  "cross_language": {
+    "median_entropy_ratio": 0.6848805810783475,
+    "frac_below_half": 0.17872340425531916,
+    "median_dominant_share": 0.5,
+    "frac_dominant_over_80pct": 0.00851063829787234
+  },
+  "paired_consistency": {
+    "top1": 0.49266666173934937,
+    "top1_control": 0.00416666641831398,
+    "top1_lift": 0.4884999953210354,
+    "overlap": 0.582966685295105,
+    "overlap_control": 0.026133334264159203,
+    "overlap_lift": 0.5568333510309458,
+    "k": 5,
+    "n": 6000
+  },
+  "coherence": {
+    "control": 0.15157879889011383,
+    "control_std": 0.03257205303205601,
+    "median_lift": 0.11035589873790741,
+    "frac_positive": 0.9744680851063829
+  },
+  "ablation": {
+    "full_p_at_1": 0.8558333516120911,
+    "n_ablated": 3,
+    "mean_delta": -0.0014444589614868164,
+    "min_delta": -0.002499997615814209,
+    "unevenness": 0.5188622869897637
+  },
+  "checks": {
+    "cross_language": false,
+    "paired_consistency": true,
+    "coherence": true,
+    "ablation_unevenness": true
+  },
+  "verdict": "partial",
+  "samples": {
+    "83": [
+      "No es así como dirijo este negocio.",
+      "Sounds like artifact-y circumstances.",
+      "This, perhaps, will settle the matter between us.",
+      "Das ist irgendwie intimer oder so.",
+      "ऐसा होता है, यह सिर्फ होता है.",
+      "ومثل هذه المضيعة هي فقط ستؤخر ما هو حتمي.",
+      "Das ist Einsatz.",
+      "Clearly, he has his mother's manners."
+    ],
+    "41": [
+      "Though we never thought that we could lose There's no regrets",
+      "After we laughed, let's move on to the serious part.",
+      "{fnFangSong_GB2312bord1shad1pos(200,288)}我們的帶就保證沒有花，跳紋的",
+      "我們的主啊！我們確已聽見一個召喚的人，召人於正信，（他說）：『你們當確信你們的主。』我們就確信了。我們的主啊！求你赦宥我們的罪惡，求你消除我們的過失，求你使我們與義人們死在一處。",
+      "We were sure the government was gonna show up on our doorstep but no one ever came.",
+      "Fester, before we go any further,",
+      "हमने उन्हें पैदा किया और उनके जोड़-बन्द मज़बूत किेए और हम जब चाहे उन जैसों को पूर्णतः बदल दें",
+      "हम तुम्हारे पहले के लोगों को भी जानते है और बाद के आनेवालों को भी हम जानते है"
+    ],
+    "45": [
+      "One State addressed the question of extradition of nationals who have the nationality of the requested State as well as the requesting State.",
+      "Software-Patent-Anmeldungen im Feldbus-, Intranet-, Internet-Umfeld",
+      "巴西、菲律宾、新西兰、科威特、阿拉伯利比亚民众国、伊朗伊斯兰共和国、列支敦士登的代表以及罗马教廷观察员发言。",
+      "Las empresas a las que se denegó el estatuto de recién llegado fueron informadas de las razones de dicha decisión y tuvieron ocasión de formular sus observaciones por escrito.",
+      "10- اتصلت دولة طرف واحدة بالوحدة طالبة منها المساعدة فيما يتعلق بتنفيذ الاتفاقية.",
+      "واتصل المشتري بالبائع عدة مرات ليعلن فسخ العقد، وطلب أن يستعيد البائع البضائع ويرد لـه ثمن الشراء.",
+      "On a few occasions, he was forced to sign blank pages of paper that were later filled in by the investigator.",
+      "मेजबान '%s' के लिए SSL प्रमाणपत्र, ज्ञापन सूची '%s' के द्वारा प्रयोग किया जाता है, पर भरोसा नहीं है.क्या आप इसे स्वीकार करने के लिए करना चाहते हैं?"
+    ]
+  }
+}

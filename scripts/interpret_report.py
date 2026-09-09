@@ -125,7 +125,7 @@ def main(argv=None):
                   "ablation_unevenness_min": ABLATION_UNEVENNESS_MIN}}
 
     # --- 1. cross-language ------------------------------------------------
-    xl = interpret.cross_language(alpha, langs, k=a.topk)
+    xl = interpret.cross_language(alpha, langs, k=a.topk, seed=a.seed)
     ratios = np.array([xl[i]["entropy_ratio"] for i in range(n_prim)
                        if used[i]])
     shares = np.array([xl[i]["dominant_share"] for i in range(n_prim)
@@ -136,7 +136,11 @@ def main(argv=None):
         "median_dominant_share": float(np.median(shares)),
         "frac_dominant_over_80pct": float((shares > 0.8).mean()),
     }
+    report["cross_language"]["control_entropy"] = xl["_control"]["expected_entropy"]
     print("1. CROSS-LANGUAGE  (are coordinates language detectors?)")
+    print(f"   control: E[entropy of a random {a.topk}-sample] = "
+          f"{xl['_control']['expected_entropy']:.3f} nats over "
+          f"{xl['_control']['n_languages']} languages")
     print(f"   median entropy ratio   {np.median(ratios):.3f} "
           f"(threshold >= {LANG_ENTROPY_MIN})")
     print(f"   coords below 0.5       {(ratios < 0.5).mean():.1%}")

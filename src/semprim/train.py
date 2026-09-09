@@ -25,7 +25,7 @@ import torch
 import yaml
 
 from . import losses as L
-from .archetypal import archetypal_fit
+from .archetypal import archetypal_fit, fit_quality
 from .encode import ensure_cache
 from .kernels import build_kernel
 from .model import PrimitiveModel
@@ -72,8 +72,27 @@ def build_texts(cfg):
 
     ``pair_index`` is a list of (i, j) into ``texts``: i and j are meaning
     equivalent, and are what L_align pulls together.
+
+    If ``scripts/stage_a.py`` has already written a ``corpus.json`` beside the
+    cache, it is reused verbatim. That is not only a speed matter: re-streaming
+    OPUS-100 per run costs about a minute, needs the network, and -- because the
+    datasets cache defaults to the user profile rather than HF_HOME unless the
+    variable is set -- quietly writes to the system drive, which on this machine
+    has under 7 GB free. Reusing the file also guarantees every N in a sweep
+    trains on exactly the same corpus, which re-streaming does not: the loader
+    takes the first N rows of a shard after filtering, so a change in the
+    dataset upstream would silently give two sweep points different data.
     """
     source = cfg["data"]["source"]
+
+    corpus_path = os.path.join(cfg.get("cache_dir", ""), "corpus.json")
+    if source != "synthetic" and os.path.exists(corpus_path):
+        with open(corpus_path, encoding="utf-8") as f:
+            corpus = json.load(f)
+        pairs = [tuple(p) for p in corpus["pairs"]]
+        print(f"reusing corpus.json from {corpus_path}")
+        return corpus["texts"], pairs
+
     if source == "synthetic":
         from .data import synthetic_pairs
         rows = synthetic_pairs(n=cfg["data"]["n"],
@@ -120,15 +139,30 @@ def train(cfg: dict, out_dir: str) -> dict:
     # autoencoding through the simplex -- i.e. archetypal analysis. Fit the
     # non-amortised version first: it both seeds D and gives the error the
     # trained head is measured against.
+    recon_mode = cfg["loss"].get("reconstruct_mode", "cosine")
     ceiling = None
     if cfg.get("archetypal", {}).get("enabled", True):
         sample = H[torch.randperm(H.shape[0])[:cfg.get("archetypal", {}).get("sample", 5000)]]
         t0 = time.perf_counter()
-        D0, _, ceiling = archetypal_fit(
-            sample.to(device), n_primitives,
+        # free_scale must track reconstruct_mode. A cosine loss is invariant to
+        # the reconstruction's magnitude, which is exactly what a free
+        # per-example scale expresses -- so fitting the ceiling without it would
+        # bound a different objective than the head optimises, and would not
+        # bound the head at all.
+        sample_n = torch.nn.functional.normalize(sample.to(device), dim=-1)
+        D0, A0, _ = archetypal_fit(
+            sample_n, n_primitives,
             outer=cfg.get("archetypal", {}).get("outer", 15),
-            inner=cfg.get("archetypal", {}).get("inner", 50), seed=seed)
-        print(f"archetypal ceiling at N={n_primitives}: {ceiling:.6f} "
+            inner=cfg.get("archetypal", {}).get("inner", 50), seed=seed,
+            normalize=False, free_scale=(recon_mode == "cosine"))
+        quality = fit_quality(D0, A0, sample_n)
+        # Reported in the loss's own units, so the comparison at the end is a
+        # comparison and not a units error.
+        ceiling = quality["cosine_loss"] if recon_mode == "cosine" \
+            else quality["mse"]
+        print(f"archetypal ceiling at N={n_primitives} "
+              f"({recon_mode}): {ceiling:.6f}   "
+              f"[mse {quality['mse']:.6f}, cos {quality['cosine']:.4f}] "
               f"({time.perf_counter() - t0:.1f}s)")
     else:
         D0 = None
@@ -234,6 +268,7 @@ def train(cfg: dict, out_dir: str) -> dict:
     summary = {
         "history": history,
         "archetypal_ceiling": ceiling,
+        "reconstruct_mode": recon_mode,
         "final": history[-1] if history else None,
         "n_primitives": n_primitives,
         "device": str(device),

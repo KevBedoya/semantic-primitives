@@ -281,6 +281,25 @@ def archetypal_fit(Y: torch.Tensor, n_primitives: int, outer: int = 30,
 
 
 @torch.no_grad()
+def fit_quality(D: torch.Tensor, A: torch.Tensor, Y: torch.Tensor) -> dict:
+    """The fit's error in both units the training loss can be expressed in.
+
+    Needed because the ceiling is only a bound if it is measured in the same
+    units as the loss it bounds. ``losses.reconstruction_loss`` defaults to
+    ``mode="cosine"`` and returns ``1 - cos``, while ``archetypal_fit`` reports
+    squared error; comparing the two directly is a units error that would make
+    the head look like it beat a bound by an order of magnitude. Callers pick
+    the field matching their ``reconstruct_mode``.
+    """
+    R = A @ D
+    return {
+        "mse": float(((R - Y) ** 2).sum(dim=-1).mean()),
+        "cosine": float(F.cosine_similarity(R, Y, dim=-1).mean()),
+        "cosine_loss": float((1.0 - F.cosine_similarity(R, Y, dim=-1)).mean()),
+    }
+
+
+@torch.no_grad()
 def reconstruction_ceiling(Y: torch.Tensor, n_values, **kwargs) -> dict:
     """Ceiling per N, for the sweep. Returns {N: mse}."""
     return {int(n): archetypal_fit(Y, int(n), **kwargs)[2] for n in n_values}

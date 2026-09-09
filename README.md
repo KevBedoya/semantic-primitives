@@ -146,6 +146,44 @@ gives a non-amortised baseline that bounds what the head can achieve, an
 initialisation for `D`, and a way to tell "the head can't compute this mapping"
 apart from "`N` is too small" — two failures with opposite remedies.
 
+## Finding: reconstruct direction, not distance
+
+Milestone 2 changed the design. Fitting the ceiling with squared error against
+L2-normalised targets produced archetypes with a **median norm 17.6× the data
+radius**, whose nearest real text had cosine ~0.45 out of 50,000 candidates.
+That is fatal to the point of the model: column `d_i` is meant to be the
+teacher-space meaning of primitive `i`, and a point no text resembles cannot
+serve as one — the mixture was reconstructing by cancellation between distant
+extremes rather than by combining recognisable concepts.
+
+The cause is arithmetic, not optimisation. A convex combination of unit vectors
+has norm ≤ 1, with equality only when the mass sits on coincident vertices,
+while the targets have norm exactly 1. Squared error charges the model for a
+norm that interpretable, data-adjacent archetypes structurally cannot reach, and
+the only way to pay is to push them outward. The uninterpretable decoder was
+what the objective asked for.
+
+Three fits at N=256, same data (`scripts/decoder_geometry.py`):
+
+| fit | cosine | archetype radius | nearest-text cos |
+|---|---|---|---|
+| free (unconstrained `D`) | 0.9879 | 17.59 | 0.447 |
+| `D` pinned to unit sphere | 0.7629 | 1.00 | 0.592 |
+| sphere + free per-example scale | **0.9892** | **1.00** | 0.503 |
+
+Freeing the scale — identical to scoring cosine, since minimising `‖y − s·r‖²`
+over `s` *is* maximising `cos(y, r)` — recovers all the lost direction quality
+and slightly beats the unconstrained fit, with archetypes on the data's own
+sphere. **Interpretable archetypes are free; the squared-error formulation was
+paying for the wrong thing.** `reconstruct_mode: cosine` is now the default.
+
+One trap this surfaced: with a free scale, `(b, D)` and `(cb, D/c)` reconstruct
+identically, so archetype norms become redundant parameters and the alternating
+fit wanders along that ray — it returned a *worse* optimum than the strictly
+more constrained simplex fit (0.04071 vs 0.02431), which is impossible for a
+true optimum. `archetypal_fit` now pins `‖d_i‖ = 1` whenever the scale is free,
+and `test_free_scale_is_never_worse_than_the_simplex_fit` guards it.
+
 ## Known limits
 
 **Role binding.** A mixture over primitives has no mechanism to distinguish "the

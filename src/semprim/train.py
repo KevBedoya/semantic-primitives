@@ -189,7 +189,9 @@ def train(cfg: dict, out_dir: str) -> dict:
                 loss = loss + float(w["align"]) * a
                 parts["align"] = a.item()
             if w.get("reconstruct", 0):
-                r = L.reconstruction_loss(model.reconstruct(alpha_a), h_a)
+                r = L.reconstruction_loss(
+                    model.reconstruct(alpha_a), h_a,
+                    mode=w.get("reconstruct_mode", "cosine"))
                 loss = loss + float(w["reconstruct"]) * r
                 parts["reconstruct"] = r.item()
             if w.get("sparsity", 0):

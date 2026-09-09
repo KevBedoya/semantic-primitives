@@ -47,6 +47,13 @@ loss:
   contrast: 1.0
   align: 1.0
   reconstruct: 1.0
+  # Direction, not distance. Measured at N=256: squared error against
+  # L2-normalised targets drives the archetypes to 17.6x the data radius, where
+  # the nearest real text to an archetype has cosine 0.45 -- i.e. the decoder
+  # columns stop denoting anything a text resembles, which is the whole point of
+  # having them. Scoring cosine recovers the same reconstruction quality with
+  # archetypes on the data's own sphere. See scripts/decoder_geometry.py.
+  reconstruct_mode: cosine
   # Keep small. Entropy pushed hard turns the model into a near one-hot
   # classifier, which throws away the mixture semantics the design exists for.
   # Prefer raising the entmax alpha to get zeros.

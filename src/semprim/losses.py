@@ -92,19 +92,55 @@ def contrastive_loss(alpha_a: torch.Tensor, alpha_p: torch.Tensor,
 
 # ------------------------------------------------------------- reconstruction
 def reconstruction_loss(y_hat: torch.Tensor, y_teacher: torch.Tensor,
-                        normalize_teacher: bool = True) -> torch.Tensor:
-    """||y - D a||^2 against a frozen teacher's semantic embedding.
+                        normalize_teacher: bool = True,
+                        mode: str = "cosine") -> torch.Tensor:
+    """Reconstruct the teacher embedding from the mixture, scoring direction.
 
-    ``normalize_teacher`` matters more than it looks. LaBSE embeddings are
-    L2-normalised and lie on a sphere, while {D a : a in simplex} is a polytope.
-    Against unnormalised targets the loss is dominated by getting the *norm*
-    right, which the decoder can do without the coordinates meaning anything.
-    Normalising puts every target on the sphere so the residual is about
-    direction -- which is what carries the semantics.
+    ``mode="cosine"`` is the default, and the choice is load-bearing rather than
+    stylistic. It was made from measurement -- see
+    scripts/decoder_geometry.py and results/ceiling/decoder_geometry_n256.json.
+
+    WHY NOT SQUARED ERROR
+    ---------------------
+    Under ``mode="l2"`` against L2-normalised targets, the fitted archetypes at
+    N=256 came out with a median norm of **17.6x the data radius**, and the
+    nearest real text to an archetype had cosine 0.45 out of 50,000 candidates.
+    That is fatal to the point of the model: column d_i is supposed to be the
+    teacher-space meaning of primitive i, and a point no text resembles cannot
+    serve as one. The mixture was reconstructing by cancellation between distant
+    extremes rather than by combining recognisable concepts.
+
+    The cause is arithmetic. A convex combination of unit vectors has norm <= 1,
+    with equality only when the mass sits on coincident vertices, while the
+    targets have norm exactly 1. Squared error therefore charges the model for a
+    norm that an interpretable, data-adjacent set of archetypes structurally
+    cannot reach, and the only way to pay is to push the archetypes outward. The
+    uninterpretable decoder was not a fitting artefact; it was what the objective
+    asked for.
+
+    Measured at N=256, three fits, same data:
+
+        free (unconstrained D)      cosine 0.9879   archetype radius 17.59
+        D pinned to unit sphere     cosine 0.7629   archetype radius  1.00
+        sphere + free scale         cosine 0.9892   archetype radius  1.00
+
+    Freeing the scale -- which is identical to scoring cosine, since minimising
+    ||y - s*r||^2 over s is maximising cos(y, r) -- recovers *all* of the lost
+    direction quality and slightly beats the unconstrained fit, with archetypes
+    sitting on the data's own sphere. Interpretable archetypes are free; the
+    squared-error formulation was simply paying for the wrong thing.
+
+    ``mode="l2"`` is kept so the original formulation can be reproduced, not
+    because it is a reasonable alternative.
     """
     if normalize_teacher:
         y_teacher = F.normalize(y_teacher, dim=-1)
-    return ((y_hat - y_teacher) ** 2).sum(dim=-1).mean()
+    if mode == "cosine":
+        return (1.0 - F.cosine_similarity(y_hat, y_teacher, dim=-1)).mean()
+    if mode == "l2":
+        return ((y_hat - y_teacher) ** 2).sum(dim=-1).mean()
+    raise ValueError(f"unknown reconstruction mode {mode!r}; "
+                     f"expected 'cosine' or 'l2'")
 
 
 # ------------------------------------------------------------------ sparsity

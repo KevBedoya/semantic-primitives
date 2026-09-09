@@ -1,0 +1,33 @@
+{
+  "n": 256,
+  "sample": 20000,
+  "results": {
+    "free": {
+      "mse": 0.02408011071383953,
+      "cosine": 0.9878846406936646,
+      "recon_norm_mean": 0.987862765789032,
+      "archetype_radius_median": 17.593612670898438,
+      "archetype_radius_max": 24.03913688659668,
+      "nearest_text_cos_mean": 0.44675248861312866,
+      "active_per_text": 196.70278930664062
+    },
+    "sphere": {
+      "mse": 0.49735692143440247,
+      "cosine": 0.7629439234733582,
+      "recon_norm_mean": 0.479205846786499,
+      "archetype_radius_median": 1.0,
+      "archetype_radius_max": 1.0000001192092896,
+      "nearest_text_cos_mean": 0.5920126438140869,
+      "active_per_text": 12.100299835205078
+    },
+    "sphere+scale": {
+      "mse": 0.021514547988772392,
+      "cosine": 0.9891884326934814,
+      "recon_norm_mean": 0.9836553335189819,
+      "archetype_radius_median": 1.0,
+      "archetype_radius_max": 1.0000001192092896,
+      "nearest_text_cos_mean": 0.5033239126205444,
+      "active_per_text": 243.86654663085938
+    }
+  }
+}

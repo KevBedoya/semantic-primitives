@@ -70,6 +70,19 @@ def pca_error(Y: torch.Tensor, rank: int) -> float:
     return float(tail)
 
 
+def pca_is_degenerate(rank: int, dim: int) -> bool:
+    """True when the PCA reference carries no information.
+
+    For rank >= dim a linear code reconstructs *exactly* -- there is nothing
+    left to project away -- so PCA@N is 0 by construction and the "cost of
+    simplex" column silently becomes the ceiling compared against a trivially
+    perfect reference. At d = 768 that makes the N = 1024 row's comparison
+    meaningless even though the ceiling itself is fine. Flagged rather than
+    hidden, because a 0.00000 in a results table reads as a strong result.
+    """
+    return rank >= dim
+
+
 @torch.no_grad()
 def mean_error(Y: torch.Tensor) -> float:
     """MSE of reconstructing everything by the corpus mean -- the N=1 floor."""
@@ -136,6 +149,12 @@ def main(argv=None):
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", default=os.path.join("results", "ceiling"))
     p.add_argument("--device", default="auto")
+    p.add_argument("--free-scale", action="store_true",
+                   help="fit with a free per-example scale, matching a cosine "
+                        "reconstruction loss. Use this whenever the model's "
+                        "reconstruct_mode is 'cosine' -- a ceiling computed "
+                        "under a different objective than the model optimises "
+                        "does not bound it.")
     a = p.parse_args(argv)
 
     device = torch.device("cuda" if (a.device == "auto" and
@@ -162,17 +181,22 @@ def main(argv=None):
         t0 = time.perf_counter()
         D, _, mse = archetypal_fit(Y, n, outer=a.outer, inner=a.inner,
                                    seed=a.seed, normalize=False,
-                                   chunk=a.chunk)
+                                   chunk=a.chunk, free_scale=a.free_scale)
         pca = pca_error(Y, n)
         geom = archetype_geometry(D, Y)
+        degenerate = pca_is_degenerate(n, Y.shape[1])
         rows.append({"n": n, "ceiling": mse, "pca_rank_n": pca,
                      "mean_floor": floor,
-                     "constraint_cost": mse - pca,
+                     "constraint_cost": None if degenerate else mse - pca,
+                     "pca_degenerate": degenerate,
                      "geometry": geom,
                      "seconds": time.perf_counter() - t0})
+        cost = ("n/a" if degenerate else f"{mse - pca:+.5f}")
         print(f"N={n:>5}  ceiling {mse:.5f}   PCA@{n} {pca:.5f}   "
-              f"cost of simplex {mse - pca:+.5f}   "
-              f"({time.perf_counter() - t0:.1f}s)", flush=True)
+              f"cost of simplex {cost}   "
+              f"({time.perf_counter() - t0:.1f}s)"
+              + ("   [PCA degenerate: N >= d]" if degenerate else ""),
+              flush=True)
         print(f"        archetype radius {geom['radius_median']:.2f} "
               f"(max {geom['radius_max']:.2f}) vs data radius "
               f"{geom['data_radius']:.2f};  nearest-text cos "
@@ -196,10 +220,16 @@ def format_table(rows, floor: float) -> str:
            f"{'N':>6} {'ceiling':>10} {'PCA@N':>10} {'simplex cost':>13} "
            f"{'% of floor':>11}"]
     for r in rows:
+        cost = ("n/a" if r.get("pca_degenerate")
+                else f"{r['constraint_cost']:+.5f}")
         out.append(f"{r['n']:>6} {r['ceiling']:>10.5f} {r['pca_rank_n']:>10.5f} "
-                   f"{r['constraint_cost']:>+13.5f} "
+                   f"{cost:>13} "
                    f"{100 * r['ceiling'] / max(floor, 1e-12):>10.1f}%")
     out.append("")
+    if any(r.get("pca_degenerate") for r in rows):
+        out.append("n/a          = N >= embedding dim, so a linear code reconstructs")
+        out.append("               exactly and PCA@N is 0 by construction. The")
+        out.append("               comparison carries no information at that N.")
     out.append("ceiling      = best achievable by ANY head at this N; the trained")
     out.append("               head cannot beat it, and matching it means N is the")
     out.append("               thing to change, not the head.")

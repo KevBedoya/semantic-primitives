@@ -1,0 +1,44 @@
+{
+  "cache": "results\\cache\\opus7",
+  "sample": 50000,
+  "mean_floor": 0.8458395600318909,
+  "rows": [
+    {
+      "n": 64,
+      "ceiling": 0.40499362349510193,
+      "pca_rank_n": 0.3987278022289008,
+      "mean_floor": 0.8458395600318909,
+      "constraint_cost": 0.0062658212662011215,
+      "pca_degenerate": false,
+      "geometry": {
+        "radius_mean": 8.940018653869629,
+        "radius_median": 9.238380432128906,
+        "radius_max": 10.762866020202637,
+        "data_radius": 1.0,
+        "nearest_text_cos_mean": 0.4691620469093323,
+        "nearest_text_cos_min": 0.3092477023601532
+      },
+      "seconds": 30.632837999612093
+    },
+    {
+      "n": 256,
+      "ceiling": 0.024306263774633408,
+      "pca_rank_n": 0.02058558050923632,
+      "mean_floor": 0.8458395600318909,
+      "constraint_cost": 0.0037206832653970887,
+      "pca_degenerate": false,
+      "geometry": {
+        "radius_mean": 17.124652862548828,
+        "radius_median": 17.375564575195312,
+        "radius_max": 24.390329360961914,
+        "data_radius": 1.0,
+        "nearest_text_cos_mean": 0.4526895582675934,
+        "nearest_text_cos_min": 0.19687029719352722
+      },
+      "seconds": 71.83271019905806
+    }
+  ],
+  "outer": 30,
+  "inner": 100,
+  "seed": 0
+}

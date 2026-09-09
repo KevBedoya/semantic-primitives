@@ -117,6 +117,54 @@ def cross_language(alpha: torch.Tensor, langs, k: int = 50) -> dict:
 
 
 @torch.no_grad()
+def paired_consistency(model, h_a: torch.Tensor, h_b: torch.Tensor,
+                       k: int = 5, seed: int = 0) -> dict:
+    """Do a text and its translation activate the SAME coordinates?
+
+    The most direct test of the central claim. Language-independent primitives
+    means coordinate i denotes the same thing whichever language expresses it,
+    so for a held-out translation pair the two sides should land on the same
+    coordinates -- not merely end up nearby under the kernel, which the
+    contrastive loss could achieve by any means.
+
+    Reported three ways, because each alone is misleading:
+
+      * ``top1``     -- fraction of pairs whose argmax coordinate agrees. Strict,
+                        and the number to quote.
+      * ``overlap``  -- mean |top-k(a) ∩ top-k(b)| / k. Forgiving of ties among
+                        near-equal coordinates, which are common on a simplex.
+      * ``*_control`` -- the same statistics over *mismatched* pairs. Essential:
+                        with 21 of 256 coordinates active and a skewed usage
+                        distribution, unrelated texts already share coordinates
+                        at some rate. Only the lift over that rate is evidence.
+
+    Note this is what L_align optimises, so a good score is not a surprise --
+    it is a check that the objective transferred to held-out data rather than a
+    discovery. A *bad* score here would be damning.
+    """
+    a = model(h_a)
+    b = model(h_b)
+    n = a.shape[0]
+
+    def stats(x, y):
+        top1 = (x.argmax(dim=-1) == y.argmax(dim=-1)).float().mean().item()
+        kk = min(k, x.shape[-1])
+        tx = x.topk(kk, dim=-1).indices
+        ty = y.topk(kk, dim=-1).indices
+        # Set overlap per row, without materialising an (n, N) one-hot.
+        hit = (tx.unsqueeze(2) == ty.unsqueeze(1)).any(dim=2).float().sum(dim=1)
+        return top1, (hit / kk).mean().item()
+
+    g = torch.Generator(device="cpu").manual_seed(seed)
+    perm = torch.randperm(n, generator=g).to(b.device)
+    t1, ov = stats(a, b)
+    t1c, ovc = stats(a, b[perm])
+    return {"top1": t1, "top1_control": t1c, "top1_lift": t1 - t1c,
+            "overlap": ov, "overlap_control": ovc, "overlap_lift": ov - ovc,
+            "k": k, "n": n}
+
+
+@torch.no_grad()
 def ablate(model, kernel, h_query: torch.Tensor, h_cand: torch.Tensor,
            coordinate: int) -> float:
     """P@1 with one coordinate zeroed and the rest renormalised.

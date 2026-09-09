@@ -55,16 +55,35 @@ setx HF_HOME "N:\work\semantic-primitives\.hf"
 ## Run
 
 ```powershell
+$env:HF_HOME    = "N:\work\semantic-primitives\.hf"
+$env:PYTHONPATH = "N:\work\semantic-primitives\src"
+
 .\.venv\python.exe -m pytest tests -q                              # invariants, offline
 .\.venv\python.exe -m semprim.train --config configs\smoke.yaml    # ~1 min, offline
+
+.\.venv\python.exe scripts\stage_a.py --limit-per-lang 20000       # corpus + cache
+.\.venv\python.exe scripts\baseline_table.py                       # frozen-LaBSE row
+.\.venv\python.exe scripts\ceiling_sweep.py --n 64 256 1024        # ceiling per N
 .\.venv\python.exe -m semprim.train --config configs\base.yaml     # the real thing
 ```
 
-`PYTHONPATH` must include `src/`, or install the package in editable mode.
+Run them in that order: `baseline_table` and `ceiling_sweep` both read the cache
+`stage_a` writes, and the ceiling is what a trained run's reconstruction number
+is interpreted against.
 
 The smoke config uses synthetic data with known latent topics. It proves the
 pipeline runs; it proves nothing semantic, and its numbers must not appear in a
 results table.
+
+## Milestones
+
+| # | Deliverable | State |
+|---|---|---|
+| 1 | Env, corpus, embedding cache, LaBSE baseline table | see `results/baseline/` |
+| 2 | Non-amortised ceiling per `N` | see `results/ceiling/` |
+| 3 | Head + align/contrast/reconstruct, Hellinger, `N` sweep | — |
+| 4 | Learned `B`, sparsity annealing, interpretability diagnostics | — |
+| 5 | *Conditional:* grounding, multi-simplex, or Stage-C fine-tune | — |
 
 ## GPU
 

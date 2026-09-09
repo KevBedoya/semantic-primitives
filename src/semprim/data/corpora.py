@@ -28,18 +28,61 @@ import random
 LANGUAGES = ("en", "es", "de", "ru", "zh", "ar", "hi")
 
 
+def usable_pair(a: str, b: str, min_chars: int = 12,
+                max_chars: int = 400) -> bool:
+    """Reject pairs that would teach the model the wrong thing.
+
+    OPUS-100 is web- and subtitle-derived and genuinely noisy. Inspecting the
+    first few rows of each language turns up ``'!' || '!'``,
+    ``'[SCREAMING]' || 'ऊबड़ .'`` and ``'Vega.' || '- Vega.'``. Left in, these
+    are not merely useless -- they are actively harmful to this particular
+    design:
+
+      * A pair of punctuation marks satisfies L_align perfectly for *any*
+        alpha, so it contributes gradient that says nothing about meaning.
+      * Identical strings on both sides are untranslated boilerplate. They teach
+        alignment to reward surface identity, which is the exact shortcut the
+        seven-language, five-script setup exists to make unavailable.
+      * Very short strings carry too little context for a mixture over semantic
+        primitives to be meaningful, and they dominate the corpus by count.
+
+    ``max_chars`` is a cost control rather than a quality one: with
+    max_seq_length at 64 tokens, anything past a few hundred characters is
+    truncated anyway, so the pair's two halves would no longer be translations
+    of each other.
+    """
+    if not a or not b:
+        return False
+    a, b = a.strip(), b.strip()
+    if len(a) < min_chars or len(b) < min_chars:
+        return False
+    if len(a) > max_chars or len(b) > max_chars:
+        return False
+    if a == b:
+        return False
+    return True
+
+
 def load_translation_pairs(langs=LANGUAGES, limit_per_lang: int = 20000,
-                           pivot: str = "en", split: str = "train"):
+                           pivot: str = "en", split: str = "train",
+                           min_chars: int = 12, max_chars: int = 400,
+                           dedup: bool = True):
     """Meaning-equivalent pairs for L_align, pivoted through one language.
 
-    Returns ``[(text_pivot, text_other, lang), ...]``.
+    Returns ``[(text_pivot, text_other, lang), ...]``, filtered by
+    ``usable_pair`` and, with ``dedup``, deduplicated on the pivot side.
 
-    Pivoting through English is a practical choice with a real cost: it means
-    the model never sees, say, a Russian-Hindi pair directly, and cross-lingual
-    consistency between two non-pivot languages is only ever learned
-    transitively. That is worth remembering when reading the per-language
-    retrieval table -- non-pivot pairs are the harder case and should be
-    expected to lag.
+    Deduplication is per-language rather than global: the same English sentence
+    legitimately appears once per target language, and dropping those would
+    remove exactly the cross-language anchors alignment depends on. Within one
+    language, though, a repeated pivot is corpus duplication and would silently
+    upweight whatever it says.
+
+    Pivoting through English is a practical choice with a real cost: the model
+    never sees, say, a Russian-Hindi pair directly, so consistency between two
+    non-pivot languages is only ever learned transitively. Worth remembering
+    when reading the per-language retrieval table -- non-pivot pairs are the
+    harder case and should be expected to lag.
     """
     from datasets import load_dataset
 
@@ -50,12 +93,17 @@ def load_translation_pairs(langs=LANGUAGES, limit_per_lang: int = 20000,
         pair = f"{pivot}-{lang}" if pivot < lang else f"{lang}-{pivot}"
         ds = load_dataset("Helsinki-NLP/opus-100", pair, split=split,
                           streaming=True)
-        taken = 0
+        seen, taken = set(), 0
         for row in ds:
             tr = row["translation"]
             a, b = tr.get(pivot), tr.get(lang)
-            if not a or not b:
+            if not usable_pair(a, b, min_chars, max_chars):
                 continue
+            a, b = a.strip(), b.strip()
+            if dedup:
+                if a in seen:
+                    continue
+                seen.add(a)
             out.append((a, b, lang))
             taken += 1
             if taken >= limit_per_lang:

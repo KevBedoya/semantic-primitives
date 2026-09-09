@@ -58,7 +58,27 @@ def project_simplex(v: torch.Tensor) -> torch.Tensor:
 
 @torch.no_grad()
 def fit_alpha(Y: torch.Tensor, D: torch.Tensor, iters: int = 200,
-              lr: float | None = None, tol: float = 1e-10) -> torch.Tensor:
+              lr: float | None = None, tol: float = 1e-10,
+              chunk: int | None = None) -> torch.Tensor:
+    """Row-chunked wrapper around ``_fit_alpha_block``.
+
+    Each row's fit is independent given D, so chunking is exact -- it changes
+    peak memory and nothing else. It matters at the top of the sweep: at
+    N = 1024 with 50k samples, FISTA holds x, y, x_new and grad at
+    50000 x 1024 fp32 (205 MB each) and ``project_simplex`` adds a sort plus
+    several intermediates of the same shape, which is several GB on a card that
+    also has to hold the model and may be sharing with the solver.
+    """
+    if chunk is None or chunk >= Y.shape[0]:
+        return _fit_alpha_block(Y, D, iters=iters, lr=lr, tol=tol)
+    parts = [_fit_alpha_block(Y[i:i + chunk], D, iters=iters, lr=lr, tol=tol)
+             for i in range(0, Y.shape[0], chunk)]
+    return torch.cat(parts, dim=0)
+
+
+@torch.no_grad()
+def _fit_alpha_block(Y: torch.Tensor, D: torch.Tensor, iters: int = 200,
+                     lr: float | None = None, tol: float = 1e-10) -> torch.Tensor:
     """argmin_a ||Y - a D||^2 over the simplex, by accelerated projected gradient.
 
     ``Y`` is (n, d), ``D`` is (N, d) with archetypes as rows, result is (n, N).
@@ -131,7 +151,8 @@ def init_archetypes(Y: torch.Tensor, n_primitives: int,
 @torch.no_grad()
 def archetypal_fit(Y: torch.Tensor, n_primitives: int, outer: int = 30,
                    inner: int = 100, seed: int = 0,
-                   normalize: bool = True, verbose: bool = False):
+                   normalize: bool = True, verbose: bool = False,
+                   chunk: int | None = None):
     """Alternating fit of archetypes D and simplex codes A.
 
     Returns ``(D, A, mse)`` with D (N, d), A (n, N), and mse the mean squared
@@ -148,7 +169,7 @@ def archetypal_fit(Y: torch.Tensor, n_primitives: int, outer: int = 30,
     A = None
     mse = float("inf")
     for step in range(outer):
-        A = fit_alpha(Y, D, iters=inner)
+        A = fit_alpha(Y, D, iters=inner, chunk=chunk)
         # D given A: unconstrained least squares, min_D ||Y - A D||^2.
         # lstsq rather than the normal equations because A is often rank
         # deficient once the codes go sparse, and forming A^T A squares an

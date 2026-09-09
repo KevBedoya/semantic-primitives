@@ -9,6 +9,34 @@
       "dead": 21,
       "active_per_text": 21.50048828125,
       "b_stats": null
+    },
+    {
+      "kernel": "learned",
+      "n": 256,
+      "p_at_1": 0.957166721423467,
+      "baseline": 0.9163333773612976,
+      "dead": 0,
+      "active_per_text": 96.66162109375,
+      "b_stats": {
+        "offdiag_abs_mean": 0.06497190335631899,
+        "offdiag_max": 0.45880397842970433,
+        "eig_min": 0.00010000760818048802,
+        "n": 256
+      }
+    },
+    {
+      "kernel": "mixture",
+      "n": 256,
+      "p_at_1": 0.958833376566569,
+      "baseline": 0.9163333773612976,
+      "dead": 0,
+      "active_per_text": 74.8154296875,
+      "b_stats": {
+        "offdiag_abs_mean": 0.07100289240016625,
+        "offdiag_max": 0.4007240411498413,
+        "eig_min": 0.00010001146774619925,
+        "n": 256
+      }
     }
   ]
 }

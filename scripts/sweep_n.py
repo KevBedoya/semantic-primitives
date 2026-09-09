@@ -36,6 +36,8 @@ sys.path.insert(0, os.path.join(_ROOT, "src"))
 sys.path.insert(0, _ROOT)                      # for the eval/ package
 
 from eval import retrieval                              # noqa: E402
+from semprim.corpus import (assert_disjoint, heldout_by_lang,  # noqa: E402
+                            load_corpus, split_pairs)
 from semprim.encode import load_cache                    # noqa: E402
 from semprim.kernels import build_kernel                 # noqa: E402
 from semprim.model import PrimitiveModel                 # noqa: E402
@@ -43,22 +45,24 @@ from semprim.train import load_config, train             # noqa: E402
 
 
 def heldout_pairs_by_lang(cache_dir: str, device) -> dict:
-    """{lang: (h_en, h_xx)} over held-out pairs only, aligned row for row."""
-    with open(os.path.join(cache_dir, "corpus.json"), encoding="utf-8") as f:
-        corpus = json.load(f)
+    """{lang: (h_en, h_xx)} over held-out pairs only, aligned row for row.
+
+    Goes through semprim.corpus so training and evaluation cannot disagree
+    about what "held out" means -- they did once, and every retrieval number in
+    Milestones 3 and 4 had to be thrown away.
+    """
+    corpus = load_corpus(cache_dir)
+    train_pairs, held_pairs = split_pairs(corpus)
+    assert_disjoint(train_pairs, held_pairs)
+
     cache = load_cache(cache_dir)
     H = torch.from_numpy(np.asarray(cache, dtype=np.float32)).to(device)
 
-    pairs = np.asarray(corpus["pairs"])
-    held = np.asarray(corpus["heldout"], dtype=bool)
-    langs = np.asarray(corpus["pair_langs"])
-
     out = {}
-    for lang in sorted(set(langs.tolist())):
-        sel = held & (langs == lang)
-        if sel.sum() < 2:
+    for lang, plist in heldout_by_lang(corpus).items():
+        if len(plist) < 2:
             continue
-        idx = pairs[sel]
+        idx = np.asarray(plist)
         out[lang] = (H[torch.from_numpy(idx[:, 0]).to(device)],
                      H[torch.from_numpy(idx[:, 1]).to(device)])
     return out

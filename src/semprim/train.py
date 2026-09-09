@@ -26,6 +26,7 @@ import yaml
 
 from . import losses as L
 from .archetypal import archetypal_fit, fit_quality
+from .corpus import assert_disjoint, load_corpus, split_pairs
 from .encode import ensure_cache
 from .kernels import build_kernel
 from .model import PrimitiveModel
@@ -87,10 +88,14 @@ def build_texts(cfg):
 
     corpus_path = os.path.join(cfg.get("cache_dir", ""), "corpus.json")
     if source != "synthetic" and os.path.exists(corpus_path):
-        with open(corpus_path, encoding="utf-8") as f:
-            corpus = json.load(f)
-        pairs = [tuple(p) for p in corpus["pairs"]]
-        print(f"reusing corpus.json from {corpus_path}")
+        corpus = load_corpus(cfg["cache_dir"])
+        # TRAIN PAIRS ONLY. This previously returned every pair, held-out
+        # included, so evaluation scored data the model had trained on -- see
+        # semprim/corpus.py for what that cost.
+        pairs, held = split_pairs(corpus)
+        assert_disjoint(pairs, held)
+        print(f"reusing corpus.json from {corpus_path}: "
+              f"{len(pairs):,} train pairs, {len(held):,} held out")
         return corpus["texts"], pairs
 
     if source == "synthetic":

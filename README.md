@@ -79,11 +79,44 @@ results table.
 
 | # | Deliverable | State |
 |---|---|---|
-| 1 | Env, corpus, embedding cache, LaBSE baseline table | see `results/baseline/` |
-| 2 | Non-amortised ceiling per `N` | see `results/ceiling/` |
-| 3 | Head + align/contrast/reconstruct, Hellinger, `N` sweep | — |
+| 1 | Env, corpus, embedding cache, LaBSE baseline table | done — `results/baseline/` |
+| 2 | Non-amortised ceiling per `N` | done — `results/ceiling_cosine/` |
+| 3 | Head + align/contrast/reconstruct, Hellinger, `N` sweep | next |
 | 4 | Learned `B`, sparsity annealing, interpretability diagnostics | — |
 | 5 | *Conditional:* grounding, multi-simplex, or Stage-C fine-tune | — |
+
+### Results so far
+
+**Frozen LaBSE, held-out, P@1** — the row every later table carries:
+mean **0.9163** en→xx, **0.9162** xx→en over 6,000 pairs
+(es 0.950, zh 0.948, ar 0.910, ru 0.909, de 0.894, hi 0.887).
+
+**Reconstruction ceiling**, cosine objective, 50k sample
+(`results/ceiling_cosine/ceiling.json`):
+
+| N | ceiling | PCA@N | simplex cost | % of floor | archetype radius |
+|---|---|---|---|---|---|
+| 64 | 0.40161 | 0.39873 | +0.00288 | 47.5% | 1.00 |
+| 256 | 0.02185 | 0.02059 | +0.00126 | 2.6% | 1.00 |
+| 1024 | 0.00014 | 0.00000 | n/a | 0.0% | 1.00 |
+
+The trained head cannot beat these; matching one means `N` is the thing to
+change, not the head. `n/a` at N=1024 because a linear code of rank ≥ `d` = 768
+reconstructs exactly, so the PCA reference carries no information there.
+Reconstruction is close to solved by N=256, so it will not be the binding
+constraint — the open question is whether the head reaches the ceiling and
+whether the coordinates mean anything.
+
+Every row beats the squared-error ceiling it replaced (0.40499 / 0.02431 /
+0.00550) *and* keeps the archetypes on the data sphere.
+
+**Caveat on "interpretable".** Radius 1.00 means the archetypes are no longer
+absurd — they sit where texts live rather than 17× outside. It does not mean
+they are text-like: the nearest real text to an archetype still has cosine
+~0.46–0.52, because archetypes are extreme points of the hull and sit at the
+periphery of the cloud rather than on top of any example. Necessary, not
+sufficient. The real test is what *activates* each coordinate
+(`eval/interpret.py::top_activating`), which is Milestone 4.
 
 ## GPU
 

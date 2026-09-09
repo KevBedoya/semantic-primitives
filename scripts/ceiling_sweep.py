@@ -77,6 +77,54 @@ def mean_error(Y: torch.Tensor) -> float:
     return float(((Y - mu) ** 2).sum(dim=-1).mean())
 
 
+@torch.no_grad()
+def archetype_geometry(D: torch.Tensor, Y: torch.Tensor) -> dict:
+    """How far the fitted archetypes sit from the data they describe.
+
+    WHY THIS MATTERS, AND WHY THE CEILING ALONE HIDES IT
+    ----------------------------------------------------
+    ``PrimitiveModel.decoder`` is an unconstrained linear map, so the archetypes
+    are free to be placed anywhere -- including far outside the data cloud.
+    Strict archetypal analysis forbids that (its archetypes must be convex
+    combinations of data points); this relaxation is deliberate, because a
+    ceiling computed under a tighter constraint than the model operates under
+    would not bound the model. But the relaxation has a consequence the
+    reconstruction number cannot show.
+
+    The data are L2-normalised, so every text lies exactly on the unit sphere.
+    If the archetypes are pushed out to a much larger radius, their convex hull
+    swallows the sphere and the convexity constraint becomes nearly vacuous --
+    which would explain a suspiciously small "cost of simplex" as an artefact of
+    geometry rather than evidence that convexity is cheap.
+
+    It also matters for interpretability, which is the actual goal: column d_i
+    is supposed to be "the teacher-space meaning of primitive i". If ||d_i|| is
+    5x the data radius, d_i denotes a point no text resembles and no nearest
+    neighbour will explain, and the mixture is reconstructing by cancellation
+    between distant extremes rather than by combining recognisable concepts.
+
+    Returns the archetype radius distribution and the mean cosine to the nearest
+    real text, which is the directly interpretable quantity.
+    """
+    norms = D.norm(dim=-1)
+    Dn = F.normalize(D, dim=-1)
+    Yn = F.normalize(Y, dim=-1)
+    # Nearest real text to each archetype, by cosine. Chunked over archetypes so
+    # a large N does not materialise an (N, n) matrix.
+    best = []
+    for i in range(0, Dn.shape[0], 256):
+        best.append((Dn[i:i + 256] @ Yn.T).max(dim=1).values)
+    nearest = torch.cat(best)
+    return {
+        "radius_mean": float(norms.mean()),
+        "radius_median": float(norms.median()),
+        "radius_max": float(norms.max()),
+        "data_radius": float(Y.norm(dim=-1).mean()),
+        "nearest_text_cos_mean": float(nearest.mean()),
+        "nearest_text_cos_min": float(nearest.min()),
+    }
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description="Reconstruction ceiling per N.")
     p.add_argument("--cache", default=os.path.join("results", "cache", "opus7"))
@@ -112,17 +160,24 @@ def main(argv=None):
     rows = []
     for n in a.n:
         t0 = time.perf_counter()
-        _, _, mse = archetypal_fit(Y, n, outer=a.outer, inner=a.inner,
+        D, _, mse = archetypal_fit(Y, n, outer=a.outer, inner=a.inner,
                                    seed=a.seed, normalize=False,
                                    chunk=a.chunk)
         pca = pca_error(Y, n)
+        geom = archetype_geometry(D, Y)
         rows.append({"n": n, "ceiling": mse, "pca_rank_n": pca,
                      "mean_floor": floor,
                      "constraint_cost": mse - pca,
+                     "geometry": geom,
                      "seconds": time.perf_counter() - t0})
         print(f"N={n:>5}  ceiling {mse:.5f}   PCA@{n} {pca:.5f}   "
               f"cost of simplex {mse - pca:+.5f}   "
               f"({time.perf_counter() - t0:.1f}s)", flush=True)
+        print(f"        archetype radius {geom['radius_median']:.2f} "
+              f"(max {geom['radius_max']:.2f}) vs data radius "
+              f"{geom['data_radius']:.2f};  nearest-text cos "
+              f"{geom['nearest_text_cos_mean']:.3f} "
+              f"(min {geom['nearest_text_cos_min']:.3f})", flush=True)
 
     print(f"\ncorpus-mean floor (N=1 equivalent): {floor:.5f}")
     print("\n" + format_table(rows, floor))

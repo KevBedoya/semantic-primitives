@@ -8,6 +8,17 @@
 # reproduces it from the config.
 results/**
 !results/.gitkeep
+
+# ...except the small summary tables. The frozen-LaBSE baseline and the
+# reconstruction ceiling are reference numbers that every later result is
+# interpreted against, and they cost hours of GPU time to regenerate. Versioning
+# them next to the code that produced them is the difference between "the model
+# scored 0.72" and "the model scored 0.72 against a baseline of 0.9163 measured
+# on this commit". A few kilobytes each; the caches they came from stay ignored.
+!results/baseline/
+!results/baseline/*.json
+!results/ceiling/
+!results/ceiling/*.json
 *.f16
 *.pt
 *.npy

@@ -176,11 +176,18 @@ def format_table(rows) -> str:
     out.append("")
     out.append("k-ceil is the ceiling fitted at the head's OWN support size, not")
     out.append("the dense one. A sparse head compared against a dense fit is not")
-    out.append("compared against a bound: at N=256 the dense figure reads 29.5x")
-    out.append("and implies the head cannot compute the mapping, while matched to")
-    out.append("k=21 the same head is 1.84x. Ratio near 1 means N is the thing to")
-    out.append("change; a ratio that GROWS with N means the head is failing to")
-    out.append("exploit the larger inventory, which the dead count corroborates.")
+    out.append("compared against a bound at all. Both are computed, so the size")
+    out.append("of that mistake is shown rather than asserted:")
+    for r in rows:
+        mc, dc, rec = r.get("matched_ceiling"), r.get("ceiling"), r["reconstruct"]
+        if None in (mc, dc, rec):
+            continue
+        out.append(f"    N={r['n']:<5} matched(k={r.get('matched_k')}) "
+                   f"{rec / max(mc, 1e-12):>7.2f}x   "
+                   f"dense {rec / max(dc, 1e-12):>10.2f}x")
+    out.append("Ratio near 1 means N is the thing to change; a ratio that GROWS")
+    out.append("with N means the head is failing to exploit the larger inventory,")
+    out.append("which the dead count corroborates.")
     return "\n".join(out)
 
 

@@ -123,9 +123,12 @@ kernel, held-out P@1):
 
 | N | P@1 | LaBSE | delta | dead | active/text | recon | k-ceiling | ratio |
 |---|---|---|---|---|---|---|---|---|
-| 64 | 0.8803 | 0.9163 | −0.0360 | 0/64 | 17.8 | 0.38164 | 0.28630 | 1.33× |
-| 256 | **0.9032** | 0.9163 | **−0.0132** | 21/256 | 21.5 | 0.32434 | 0.17650 | 1.84× |
-| 1024 | 0.8970 | 0.9163 | −0.0193 | 566/1024 | 21.4 | 0.31900 | 0.13032 | 2.45× |
+| 64 | 0.8803 | 0.9163 | −0.0360 | 0/64 | 17.8 | 0.38164 | 0.29300 | 1.30× |
+| 256 | **0.9032** | 0.9163 | **−0.0132** | 21/256 | 21.5 | 0.32434 | 0.16977 | 1.91× |
+| 1024 | 0.8970 | 0.9163 | −0.0193 | 566/1024 | 21.4 | 0.31900 | 0.15603 | 2.04× |
+
+Retrieval reproduced exactly across two independent runs of the sweep, so these
+are seed-deterministic rather than a lucky draw.
 
 **The compression is nearly free.** At N=256 the bottleneck retrieves within
 **1.3 points** of the encoder it compresses, using ~21 active coordinates out of
@@ -138,7 +141,7 @@ leaves 566/1024 coordinates dead — the extra inventory is not used, so the mod
 pays the sparsity cost without the benefit. Active-per-text is flat at ~21
 regardless of N, which is the entmax setting, not the capacity.
 
-**The ratio column grows with N** (1.33× → 1.84× → 2.45×), and that is the
+**The ratio column grows with N** (1.30× → 1.91× → 2.04×), and that is the
 actionable finding: the head increasingly fails to exploit a larger inventory.
 The dead count corroborates it. So above N=256 the head and losses are the
 limiting factor, not `N` — which points Milestone 4 at the diversity term and
@@ -146,12 +149,14 @@ head capacity rather than at more primitives.
 
 > **`k-ceiling`, not the dense ceiling.** A sparse head compared against a dense
 > fit is not compared against a bound. The head activates ~21 of 256
-> coordinates; against the dense Milestone-2 ceiling it reads **29.5×**, which
-> by the documented interpretation means it cannot compute the mapping. Matched
-> to k=21 the same head is **1.84×** — headroom, not failure. Opposite
-> conclusions from one run. `train.py` now fits the ceiling at the head's own
-> observed support size, and `tests/test_topk_ceiling.py` pins the properties
-> that make it a safe bound.
+> coordinates; against the dense Milestone-2 ceiling it reads **29.5×** at
+> N=256 and **4830×** at N=1024, which by the documented interpretation means it
+> cannot compute the mapping. Matched to its own support size the same head is
+> **1.91×** and **2.04×** — headroom, not failure. Opposite conclusions from one
+> run. `train.py` now fits the ceiling at the head's observed support size and
+> prints both figures, labelling the dense one as not a bound;
+> `tests/test_topk_ceiling.py` pins the properties that make the matched one
+> safe to quote.
 
 ## GPU
 

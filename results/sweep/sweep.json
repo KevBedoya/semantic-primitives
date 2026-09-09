@@ -41,6 +41,8 @@
       "active_per_text": 17.7724609375,
       "reconstruct": 0.3816424180852606,
       "ceiling": 0.2299036681652069,
+      "matched_ceiling": 0.29300254583358765,
+      "matched_k": 18,
       "tau": 1.622866153717041,
       "alpha": 2.0
     },
@@ -84,6 +86,8 @@
       "active_per_text": 21.50048828125,
       "reconstruct": 0.32433731885666545,
       "ceiling": 0.01099569071084261,
+      "matched_ceiling": 0.16977176070213318,
+      "matched_k": 22,
       "tau": 1.6611175537109375,
       "alpha": 2.0
     },
@@ -127,6 +131,8 @@
       "active_per_text": 21.35986328125,
       "reconstruct": 0.3189979005367198,
       "ceiling": 6.603755900869146e-05,
+      "matched_ceiling": 0.15602517127990723,
+      "matched_k": 21,
       "tau": 1.6911509037017822,
       "alpha": 2.0
     }
